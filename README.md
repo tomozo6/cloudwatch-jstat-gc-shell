@@ -9,30 +9,28 @@ CloudWatchに送ったメトリクスをいい感じにgrafanaでグラフ化し
 ネームスペースは "Middleware" です。
 
 ## CloudWatch Dimmensions
-"AutoscalingGroup" と "InstanceId"、２つのディメンションに送っています。
+"HostName" と "InstanceId"、２つのディメンションに送っています。
+私の使用している環境は、AutoScalingGroupName = HostName なので、
+"HostName"を"AutoScalingGroupName"の代わりに使用しています。
+AutoScalingGroupNameを取得するにはAPIを叩く必要があるためです。
+基本的には"InstanceId"ごとにメトリクスを確認します。
 
 ## CloudWatch Metrics
-送るメトリクスの項目は "jstat -gc" で出力される以下17項目です。
+CloudWatchに送るメトリクスの項目は、 "jstat -gcutil" で出力される以下11項目です。
 
-| メトリクス名 | 説明                                            | 備考 |
-| :----------- | :---------------------------------------------- | :--- |
-| S0C          | Survivor領域0の現在の容量(KB)                   |      |
-| S1C          | Survivor領域1の現在の容量(KB)                   |      |
-| S0U          | Survivor領域0の使用率(KB)                       |      |
-| S1U          | Survivor領域1の使用率(KB)                       |      |
-| EC           | Eden領域の現在の容量(KB)                        |      |
-| EU           | Eden領域の使用率(KB)                            |      |
-| OC           | Old領域の現在の容量(KB)                         |      |
-| OU           | Old領域の使用率(KB)                             |      |
-| MC           | メタスペースの容量(KB)                          |      |
-| MU           | メタスペースの使用率(KB)                        |      |
-| CCSC         | 圧縮されたクラス領域の容量(KB)                  |      |
-| CCSU         | 使用されている圧縮されたクラス領域(KB)          |      |
-| YGC          | Young世代のガベージ・コレクション・イベントの数 |      |
-| YGCT         | Young世代のガベージ・コレクション時間           |      |
-| FGC          | フルGCイベントの数                              |      |
-| FGCT         | フル・ガベージ・コレクションの時間              |      |
-| GCT          | ガベージ・コレクションの総時間                  |      |
+| メトリクス名 | 説明                         | 備考 |
+| :----------- | :--------------------------- | :--- |
+| S0           | S0領域の使用率               |      |
+| S1           | S1領域の使用率               |      |
+| E            | Eden領域の使用率             |      |
+| O            | Old領域の使用率              |      |
+| M            | メタスペースの使用率         |      |
+| CCS          | 圧縮されたクラス領域の使用率 |      |
+| YGC          | YoungGCのイベント数          |      |
+| YGCT         | YoungGCの処理時間            |      |
+| FGC          | FullGCイベントの数           |      |
+| FGCT         | FullGCの処理時間             |      |
+| GCT          | GCの総時間                   |      |
 
 # DEMO
 
@@ -42,8 +40,24 @@ CloudWatchに送ったメトリクスをいい感じにgrafanaでグラフ化し
 - AmazonLinux2
 - java-1.8.0-openjdk-devel
 
+スクリプトの中でjstatコマンドを使用しているため、openjdk-develが必要です。
+
+```
+yum install -y java-1.8.0-openjdk-devel 
+```
+
+CloudWatchにメトリクスをPushしているため、AWSの権限が必要になります。
+実行するEC2に必要なロールがアタッチされている前提となります。
+AWS管理ポリシーである "CloudWatchAgentAdminPolicy" がアタッチされていれば十分です。
+
+
+
+
+
 # 使い方
-JAVAのGC情報を取得したいマシンで、当スクリプトを実行するだけです。
+JavaのGC情報を取得したいマシンで、当スクリプトを実行するだけです。
+awscliやjstatなどのコマンドが叩けるのであれば、配置場所はどこでも構いません。
+一時ファイル等も作成しません。
 
 ## 実行ユーザー
 rootユーザーでの実行を前提としています。
@@ -60,12 +74,8 @@ rootユーザーでの実行を前提としています。
 ./cloudwatch_jstat_gc.sh Bootstrap tomcat
 ```
 
+## Cron設定例
+
 ```
-
-# Installation
-
-Install Pyxel with pip command.
-
-```bash
-pip install pyxel
+* * * * * /usr/local/scripts/cloudwatch_jstat_gc.sh Bootstrap tomcat
 ```

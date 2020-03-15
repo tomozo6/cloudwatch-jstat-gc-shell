@@ -1,6 +1,6 @@
 #!/bin/bash -eu
 #
-# Put the output of "jstat -gc" to CloudWatch.
+# Put the output of "jstat -gcutil" to CloudWatch.
 # CloudWatch's namespace is "Middleware".
 # CloudWatch's dimmentions is "AutoscalingGroup" and "InstanceId".
 #
@@ -14,25 +14,7 @@
 # function
 # ------------------------------------------------------------------------------
 #######################################
-# Get AutoScalingGroupName.
-# Arguments:
-#   - $1: region name.
-#   - $2: InstanceID
-# Returns:
-#   None
-#######################################
-function get_asgname(){
-  echo $(aws autoscaling describe-auto-scaling-instances \
-           --region $1 \
-           --output json \
-           --query AutoScalingInstances[].AutoScalingGroupName \
-           --instance-ids $2 \
-           | jq .[] \
-           | sed 's/^.*"\(.*\)".*$/\1/')
-}
-
-#######################################
-# Get jstat -qa output.
+# Get jstat -gcutil output.
 # Arguments:
 #   - $1: target java proccess name.
 #   - $2: target java proccess owner.
@@ -41,7 +23,7 @@ function get_asgname(){
 #######################################
 function get_jstat(){
   local TARGET_PID=$(sudo -u $2 jps | grep $1 | awk '{print $1}')
-  echo $(sudo -u $2 jstat -gc ${TARGET_PID} | tail -1)
+  echo $(sudo -u $2 jstat -gcutil ${TARGET_PID} | tail -1)
 }
 
 #######################################
@@ -63,63 +45,33 @@ function put_jstat_metrics(){
   local jstat_json=$(cat << EOS
   [
     {
-      "MetricName": "S0C",
-      "Value": ${S0C},
+      "MetricName": "S0",
+      "Value": ${S0},
       "Dimensions": [{"Name": "${dimension_name}", "Value": "${dimension_value}"}]
     },
     {
-      "MetricName": "S1C",
-      "Value": ${S1C},
+      "MetricName": "S1",
+      "Value": ${S1},
       "Dimensions": [{"Name": "${dimension_name}", "Value": "${dimension_value}"}]
     },
     {
-      "MetricName": "S0U",
-      "Value": ${S0U},
+      "MetricName": "E",
+      "Value": ${E},
       "Dimensions": [{"Name": "${dimension_name}", "Value": "${dimension_value}"}]
     },
     {
-      "MetricName": "S1U",
-      "Value": ${S1U},
+      "MetricName": "O",
+      "Value": ${O},
       "Dimensions": [{"Name": "${dimension_name}", "Value": "${dimension_value}"}]
     },
     {
-      "MetricName": "EC",
-      "Value": ${EC},
+      "MetricName": "M",
+      "Value": ${M},
       "Dimensions": [{"Name": "${dimension_name}", "Value": "${dimension_value}"}]
     },
     {
-      "MetricName": "EU",
-      "Value": ${EU},
-      "Dimensions": [{"Name": "${dimension_name}", "Value": "${dimension_value}"}]
-    },
-    {
-      "MetricName": "OC",
-      "Value": ${OC},
-      "Dimensions": [{"Name": "${dimension_name}", "Value": "${dimension_value}"}]
-    },
-    {
-      "MetricName": "OU",
-      "Value": ${OU},
-      "Dimensions": [{"Name": "${dimension_name}", "Value": "${dimension_value}"}]
-    },
-    {
-      "MetricName": "MC",
-      "Value": ${MC},
-      "Dimensions": [{"Name": "${dimension_name}", "Value": "${dimension_value}"}]
-    },
-    {
-      "MetricName": "MU",
-      "Value": ${MU},
-      "Dimensions": [{"Name": "${dimension_name}", "Value": "${dimension_value}"}]
-    },
-    {
-      "MetricName": "CCSC",
-      "Value": ${CCSC},
-      "Dimensions": [{"Name": "${dimension_name}", "Value": "${dimension_value}"}]
-    },
-    {
-      "MetricName": "CCSU",
-      "Value": ${CCSU},
+      "MetricName": "CCS",
+      "Value": ${CCS},
       "Dimensions": [{"Name": "${dimension_name}", "Value": "${dimension_value}"}]
     },
     {
@@ -164,7 +116,7 @@ EOS
 readonly AWS_METADATA_URL='http://169.254.169.254/latest/meta-data'
 readonly INSTANCE_ID=$(curl -s ${AWS_METADATA_URL}/instance-id/)
 readonly REGION=$(curl -s ${AWS_METADATA_URL}/placement/availability-zone/ | sed -e 's/.$//')
-readonly ASG_NAME=$(get_asgname ${REGION} ${INSTANCE_ID})
+readonly HOST_NAME=$(hostname)
 
 # setting cloudwatch namesape.
 readonly NAME_SPACE='Middleware'
@@ -175,9 +127,9 @@ readonly USER=$2
 readonly JSTAT_OUTPUT=$(get_jstat ${TARGET_PROC} ${USER})
 
 # setting jstat variables.
-read S0C S1C S0U S1U EC EU OC OU MC MU CCSC CCSU YGC YGCT FGC FGCT GCT \
+read S0 S1 E O M CCS YGC YGCT FGC FGCT GCT \
 	<<< $(echo ${JSTAT_OUTPUT} | awk '{for (i = 1; i <= NF; i++) print $i;}')
 
 # put metrics to cloudwatch.
-put_jstat_metrics ${REGION} ${NAME_SPACE} "AutoScalingGroupName" "${ASG_NAME}"
+put_jstat_metrics ${REGION} ${NAME_SPACE} "HostName" "${HOST_NAME}"
 put_jstat_metrics ${REGION} ${NAME_SPACE} "InstanceID" "${INSTANCE_ID}"
